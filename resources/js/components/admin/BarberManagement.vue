@@ -5,7 +5,8 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="border-b border-white/5 bg-white/5">
-                        <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Barber</th>
+                        <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Staff Member</th>
+                        <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Role</th>
                         <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Specialty</th>
                         <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold">Contact</th>
                         <th class="px-6 py-4 text-[10px] uppercase tracking-widest text-gray-400 font-bold text-right">Actions</th>
@@ -26,6 +27,11 @@
                                     <div class="text-[10px] text-gray-500 uppercase tracking-tighter">{{ barber.email }}</div>
                                 </div>
                             </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-xs px-2 py-1 rounded" :class="barber.role === 'admin' ? 'bg-gold/20 text-gold' : 'bg-gray-800 text-gray-300'">
+                                {{ barber.role === 'admin' ? 'Admin' : 'Barber' }}
+                            </span>
                         </td>
                         <td class="px-6 py-4">
                             <span class="text-xs text-gray-300">{{ barber.specialty || 'Generalist' }}</span>
@@ -60,7 +66,7 @@
             <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
                 <div class="bg-[#111] border border-white/10 w-full max-w-md p-8 shadow-2xl relative animate-fade-in">
                     <button @click="closeModal" class="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors text-2xl">&times;</button>
-                    <h3 class="text-2xl font-serif text-white italic mb-6">{{ isEditMode ? 'Edit Barber' : 'Add New Barber' }}</h3>
+                    <h3 class="text-2xl font-serif text-white italic mb-6">{{ isEditMode ? 'Edit Staff Member' : 'Add New Staff Member' }}</h3>
                     
                     <form @submit.prevent="submitForm" class="space-y-4">
                         <!-- Avatar Upload -->
@@ -91,9 +97,20 @@
                             <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2">Email</label>
                             <input v-model="form.email" type="email" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors">
                         </div>
+                        <div v-if="isEditMode">
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2">Password <span class="text-gray-600 normal-case">(Leave blank to keep current)</span></label>
+                            <input v-model="form.password" type="password" class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors">
+                        </div>
+                        <div v-else class="bg-[#161616] border border-white/10 p-4 rounded">
+                            <p class="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Password</p>
+                            <p class="text-xs text-gray-500">A secure password will be automatically generated and emailed to the new staff member.</p>
+                        </div>
                         <div>
-                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2">Password <span v-if="isEditMode" class="text-gray-600 normal-case">(Leave blank to keep current)</span></label>
-                            <input v-model="form.password" type="password" :required="!isEditMode" class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors">
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2">Role</label>
+                            <select v-model="form.role" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors appearance-none cursor-pointer">
+                                <option value="barber">Barber</option>
+                                <option value="admin">Administrator</option>
+                            </select>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div>
@@ -111,7 +128,7 @@
                         </div>
 
                         <button type="submit" :disabled="loading" class="w-full bg-gold text-dark font-bold py-4 uppercase tracking-[0.2em] text-xs hover:bg-gold-light transition-all mt-6 shadow-[0_0_15px_rgba(197,160,89,0.2)] disabled:opacity-50">
-                            <span v-if="!loading">{{ isEditMode ? 'Update Barber' : 'Save Barber' }}</span>
+                            <span v-if="!loading">{{ isEditMode ? 'Update Staff Member' : 'Save Staff Member' }}</span>
                             <span v-else>Saving...</span>
                         </button>
                         <div v-if="errorMsg" class="text-red-400 text-xs mt-3 text-center bg-red-400/10 py-2 border border-red-400/20">{{ errorMsg }}</div>
@@ -240,6 +257,7 @@ const form = reactive({
     password: '',
     specialty: '',
     phone: '',
+    role: 'barber',
     show_in_gallery: true,
     avatar_url: null,
     avatar: null
@@ -257,6 +275,7 @@ const closeModal = () => {
     form.password = ''
     form.specialty = ''
     form.phone = ''
+    form.role = 'barber'
     form.show_in_gallery = true
     form.avatar_url = null
     form.avatar = null
@@ -270,6 +289,7 @@ const editBarber = (barber) => {
     form.password = ''
     form.specialty = barber.specialty || ''
     form.phone = barber.phone || ''
+    form.role = barber.role || 'barber'
     form.show_in_gallery = barber.show_in_gallery
     form.avatar_url = barber.avatar_url
     form.avatar = null
@@ -304,6 +324,7 @@ const submitForm = async () => {
         formData.append('name', form.name)
         formData.append('email', form.email)
         if (form.password) formData.append('password', form.password)
+        formData.append('role', form.role)
         formData.append('specialty', form.specialty)
         formData.append('phone', form.phone)
         formData.append('show_in_gallery', form.show_in_gallery)

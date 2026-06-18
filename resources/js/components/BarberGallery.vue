@@ -1,12 +1,5 @@
 <template>
     <div class="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center p-8 overflow-hidden selection:bg-gold selection:text-dark">
-        <!-- Language Switcher -->
-        <div class="absolute top-8 right-8 flex gap-4 text-xs font-bold uppercase tracking-widest z-50">
-            <a href="/lang/ro" class="transition-colors" :class="locale === 'ro' ? 'text-gold' : 'text-gray-600 hover:text-white'">RO</a>
-            <span class="text-white/20">|</span>
-            <a href="/lang/hu" class="transition-colors" :class="locale === 'hu' ? 'text-gold' : 'text-gray-600 hover:text-white'">HU</a>
-        </div>
-
         <!-- Logo -->
         <div class="mb-16 text-center animate-fade-in relative">
             <div class="text-4xl font-serif font-bold tracking-[0.3em] text-gold uppercase mb-2">Jcob</div>

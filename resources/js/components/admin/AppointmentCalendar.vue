@@ -68,7 +68,10 @@
                         <div v-if="slot.appointment" class="flex-1 flex items-center justify-between">
                             <div>
                                 <div class="text-sm font-medium text-white group-hover:text-gold transition-colors">{{ slot.appointment.customer_name }}</div>
-                                <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">{{ slot.appointment.customer_phone }}</div>
+                                <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">
+                                    {{ slot.appointment.customer_phone }} 
+                                    <span v-if="slot.appointment.customer_email" class="lowercase ml-2 text-gold/60">{{ slot.appointment.customer_email }}</span>
+                                </div>
                                 <div class="text-[10px] uppercase tracking-widest text-gold/60 font-bold">{{ slot.appointment.service }}</div>
                             </div>
                             <div class="text-right">
@@ -150,10 +153,18 @@
                             <input v-model="form.customer_phone" type="text" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm">
                         </div>
                         <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Customer Email (Optional)</label>
+                            <input v-model="form.customer_email" type="email" class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm">
+                        </div>
+                        <div>
                             <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Service</label>
                             <select v-model="form.service" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm cursor-pointer">
                                 <option value="" disabled>Select Service</option>
-                                <option v-for="service in services" :key="service.id" :value="service.name">{{ service.name }} ({{ service.price }} RON)</option>
+                                <optgroup v-for="(groupServices, category) in groupedServices" :key="category" :label="category" class="bg-[#111] text-gray-400 font-bold">
+                                    <option v-for="service in groupServices" :key="service.id" :value="service.name" class="text-white font-normal">
+                                        {{ service.name }} ({{ service.price }} RON)
+                                    </option>
+                                </optgroup>
                             </select>
                         </div>
                         <div class="grid grid-cols-2 gap-4">
@@ -237,17 +248,73 @@ const form = reactive({
     user_id: '',
     customer_name: '',
     customer_phone: '',
+    customer_email: '',
     service: '',
     date: '',
     time: '',
     status: 'scheduled'
 })
 
-const availableTimeOptions = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'
-]
+const availableTimeOptions = computed(() => {
+    const allTimes = [
+        '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'
+    ]
+    
+    if (!form.user_id || !form.date || !form.service) return allTimes
+
+    const selectedServiceObj = props.services.find(s => s.name === form.service)
+    const selectedDuration = selectedServiceObj ? parseInt(selectedServiceObj.duration_minutes) : 30
+
+    // Fallback shift end time if no schedule is found
+    let shiftEndMinutes = 18 * 60 
+    const barber = props.barbers.find(b => b.id === form.user_id)
+    
+    if (barber && barber.schedules) {
+        const d = new Date(form.date)
+        const schedule = barber.schedules.find(s => s.day_of_week === d.getDay())
+        if (schedule && schedule.end_time) {
+            shiftEndMinutes = schedule.end_time.split(':').map(Number).reduce((h, m) => h * 60 + m)
+        }
+    }
+
+    const booked = appointments.value
+        .filter(app => app.user_id === form.user_id && app.start_at.startsWith(form.date))
+        .filter(app => app.id !== editingAppointmentId.value)
+        .map(app => {
+            const appServiceObj = props.services.find(s => s.name === app.service)
+            const appDuration = appServiceObj ? parseInt(appServiceObj.duration_minutes) : 30
+            const appDate = new Date(app.start_at)
+            const appStart = appDate.getHours() * 60 + appDate.getMinutes()
+            return { start: appStart, end: appStart + appDuration }
+        })
+
+    return allTimes.filter(time => {
+        const [h, m] = time.split(':').map(Number)
+        const slotStart = h * 60 + m
+        const slotEnd = slotStart + selectedDuration
+        
+        if (slotEnd > shiftEndMinutes) return false
+        
+        for (const app of booked) {
+            if (slotStart < app.end && slotEnd > app.start) {
+                return false
+            }
+        }
+        return true
+    })
+})
 
 // Data Computed
+const groupedServices = computed(() => {
+    const groups = {}
+    props.services.forEach(service => {
+        const cat = service.category || 'Alte Servicii'
+        if (!groups[cat]) groups[cat] = []
+        groups[cat].push(service)
+    })
+    return groups
+})
+
 const currentMonthName = computed(() => {
     return new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(currentYear.value, currentMonth.value))
 })
@@ -344,6 +411,7 @@ const openCreateModal = (timeStr) => {
     form.user_id = selectedBarberId.value || (props.barbers[0] ? props.barbers[0].id : '')
     form.customer_name = ''
     form.customer_phone = ''
+    form.customer_email = ''
     form.service = props.services[0] ? props.services[0].name : ''
     
     const d = selectedDate.value
@@ -366,6 +434,7 @@ const openEditModal = (app) => {
     form.user_id = app.user_id
     form.customer_name = app.customer_name
     form.customer_phone = app.customer_phone
+    form.customer_email = app.customer_email || ''
     form.service = app.service
     
     const appDate = new Date(app.start_at)
@@ -401,6 +470,7 @@ const submitForm = async () => {
             user_id: form.user_id,
             customer_name: form.customer_name,
             customer_phone: form.customer_phone,
+            customer_email: form.customer_email,
             service: form.service,
             start_at: startAt,
             status: form.status

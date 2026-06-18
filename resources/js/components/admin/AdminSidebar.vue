@@ -64,9 +64,17 @@ const menuItems = computed(() => {
 
     ]
 
+    if (props.userData.role === 'barber') {
+        items.push({
+            label: 'My Schedule',
+            path: 'admin/my-schedule',
+            icon: CalendarIcon
+        })
+    }
+
     if (props.userData.role === 'admin') {
         items.push({
-            label: 'Barbers',
+            label: 'Staff',
             path: 'admin/barbers',
             icon: UsersIcon
         })

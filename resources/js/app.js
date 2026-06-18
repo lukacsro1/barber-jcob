@@ -91,3 +91,12 @@ if (document.getElementById("services")) {
     const app = createApp(Services, { initialServices, user });
     app.mount("#services");
 }
+
+// My Schedule
+import MySchedule from "./components/admin/MySchedule.vue";
+if (document.getElementById("my-schedule")) {
+    const el = document.getElementById("my-schedule");
+    const user = JSON.parse(el.dataset.user || "{}");
+    const app = createApp(MySchedule, { user });
+    app.mount("#my-schedule");
+}

@@ -24,5 +24,7 @@ return [
     'privacy_policy_accept' => 'Sunt de acord cu',
     'privacy_policy_link' => 'politica de confidențialitate',
     'validation_privacy_policy' => 'Trebuie să fiți de acord cu politica de confidențialitate.',
+    'your_email' => 'Email-ul tău (Opțional)',
+    'please_select_service' => 'Vă rugăm să selectați un serviciu pentru a vedea orele disponibile.',
 ];
 

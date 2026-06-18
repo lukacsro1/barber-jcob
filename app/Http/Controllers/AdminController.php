@@ -8,7 +8,9 @@ use App\Models\Appointment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentNotification;
-
+use App\Mail\BarberAccountCreated;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 class AdminController extends Controller
 {
     public function dashboard()
@@ -81,10 +83,10 @@ class AdminController extends Controller
             $query->where('user_id', auth()->id());
         }
 
-        $appointments = $query->get(['id', 'user_id', 'customer_name', 'customer_phone', 'service', 'start_at', 'status']);
+        $appointments = $query->get(['id', 'user_id', 'customer_name', 'customer_email', 'customer_phone', 'service', 'start_at', 'status']);
 
         $barbers = User::where('role', User::ROLE_BARBER)->get(['id', 'name']);
-        $services = Service::all(['id', 'name', 'price', 'duration_minutes']);
+        $services = Service::all(['id', 'name', 'category', 'price', 'duration_minutes']);
 
         return view('admin.appointments', [
             'appointments' => $appointments,
@@ -102,8 +104,8 @@ class AdminController extends Controller
     {
         abort_if(!auth()->user()->isAdmin(), 403);
 
-        $barbers = User::where('role', User::ROLE_BARBER)
-            ->get(['id', 'name', 'email', 'phone', 'specialty', 'avatar_url', 'show_in_gallery'])
+        $barbers = User::whereIn('role', [User::ROLE_BARBER, User::ROLE_ADMIN])
+            ->get(['id', 'name', 'email', 'phone', 'specialty', 'avatar_url', 'show_in_gallery', 'role'])
             ->map(function ($user) {
                 if ($user->avatar_url) {
                     $user->avatar_url = \Illuminate\Support\Facades\Storage::url($user->avatar_url);
@@ -128,21 +130,26 @@ class AdminController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
+            'password' => 'nullable|string|min:8',
             'specialty' => 'nullable|string|max:255',
             'phone' => 'nullable|string|max:255',
+            'role' => 'required|string|in:' . User::ROLE_BARBER . ',' . User::ROLE_ADMIN,
             'show_in_gallery' => 'nullable',
             'avatar' => 'nullable|image|max:2048',
         ]);
+
+        $password = $data['password'] ?? Str::password(12);
+        $data['password'] = Hash::make($password);
 
         if ($request->hasFile('avatar')) {
             $data['avatar_url'] = $request->file('avatar')->store('avatars', 'public');
         }
         $data['show_in_gallery'] = filter_var($data['show_in_gallery'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        $data['role'] = User::ROLE_BARBER;
 
         $barber = User::create($data);
         $barber->seedDefaultSchedule();
+        
+        Mail::to($barber->email)->send(new BarberAccountCreated($barber->email, $password));
 
         if ($barber->avatar_url) {
             $barber->avatar_url = \Illuminate\Support\Facades\Storage::url($barber->avatar_url);
@@ -161,6 +168,7 @@ class AdminController extends Controller
             'password' => 'nullable|string|min:8',
             'specialty' => 'nullable|string|max:255',
             'phone' => 'nullable|string|max:255',
+            'role' => 'required|string|in:' . User::ROLE_BARBER . ',' . User::ROLE_ADMIN,
             'show_in_gallery' => 'nullable',
             'avatar' => 'nullable|image|max:2048',
         ]);
@@ -244,9 +252,22 @@ class AdminController extends Controller
         return response()->json($client);
     }
 
+    public function mySchedule()
+    {
+        return view('admin.my-schedule', [
+            'pageTitle' => 'My Schedule',
+            'user' => [
+                'id' => auth()->user()->id,
+                'name' => auth()->user()->name,
+                'role' => auth()->user()->role,
+                'show_in_gallery' => auth()->user()->show_in_gallery
+            ],
+        ]);
+    }
+
     public function getSchedule(User $barber)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
+        abort_if(!auth()->user()->isAdmin() && auth()->id() !== $barber->id, 403);
 
         $schedules = $barber->schedules()->orderBy('day_of_week')->get();
         $daysOff = $barber->daysOff()->orderBy('date')->get();
@@ -259,7 +280,7 @@ class AdminController extends Controller
 
     public function updateSchedule(Request $request, User $barber)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
+        abort_if(!auth()->user()->isAdmin() && auth()->id() !== $barber->id, 403);
 
         $request->validate([
             'schedules' => 'required|array|size:7',
@@ -285,7 +306,7 @@ class AdminController extends Controller
 
     public function addDayOff(Request $request, User $barber)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
+        abort_if(!auth()->user()->isAdmin() && auth()->id() !== $barber->id, 403);
 
         $request->validate([
             'date' => 'required|date|after_or_equal:today',
@@ -302,7 +323,7 @@ class AdminController extends Controller
 
     public function deleteDayOff(User $barber, \App\Models\BarberDayOff $dayOff)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
+        abort_if(!auth()->user()->isAdmin() && auth()->id() !== $barber->id, 403);
         abort_if($dayOff->user_id !== $barber->id, 403);
 
         $dayOff->delete();
@@ -332,6 +353,7 @@ class AdminController extends Controller
             'user_id' => 'required|exists:users,id',
             'customer_name' => 'required|string|max:255',
             'customer_phone' => 'required|string|max:255',
+            'customer_email' => 'nullable|email|max:255',
             'service' => 'required|string|max:255',
             'start_at' => 'required|date',
             'status' => 'nullable|string|in:scheduled,completed,cancelled',
@@ -348,6 +370,24 @@ class AdminController extends Controller
 
         try {
             Mail::to($appointment->barber->email)->send(new AppointmentNotification($appointment, 'booked'));
+            
+            if (!empty($appointment->customer_email)) {
+                $generatedPassword = null;
+                $user = User::where('email', $appointment->customer_email)->first();
+                
+                if (!$user) {
+                    $generatedPassword = \Illuminate\Support\Str::random(10);
+                    User::create([
+                        'name' => $appointment->customer_name,
+                        'email' => $appointment->customer_email,
+                        'phone' => $appointment->customer_phone,
+                        'password' => \Illuminate\Support\Facades\Hash::make($generatedPassword),
+                        'role' => User::ROLE_CUSTOMER,
+                    ]);
+                }
+
+                Mail::to($appointment->customer_email)->send(new \App\Mail\ClientBookingConfirmation($appointment, $generatedPassword));
+            }
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Failed to send booking email from admin: ' . $e->getMessage());
         }
@@ -365,6 +405,7 @@ class AdminController extends Controller
             'user_id' => 'required|exists:users,id',
             'customer_name' => 'required|string|max:255',
             'customer_phone' => 'required|string|max:255',
+            'customer_email' => 'nullable|email|max:255',
             'service' => 'required|string|max:255',
             'start_at' => 'required|date',
             'status' => 'required|string|in:scheduled,completed,cancelled',

@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Mail;
 use App\Mail\AppointmentNotification;
+use App\Mail\ClientBookingConfirmation;
 
 use App\Models\Shop;
 use App\Models\User;
@@ -37,7 +38,7 @@ Route::get('/lang/{locale}', function ($locale) {
 
 Route::get('/login', function () {
     if (Auth::check()) {
-        return redirect('/admin');
+        return Auth::user()->role === \App\Models\User::ROLE_CUSTOMER ? redirect('/client') : redirect('/admin');
     }
     return view('login');
 })->name('login');
@@ -50,12 +51,37 @@ Route::post('/login', function (Illuminate\Http\Request $request) {
 
     if (Auth::attempt($credentials, $request->boolean('remember'))) {
         $request->session()->regenerate();
-        return redirect('/admin');
+        return Auth::user()->role === \App\Models\User::ROLE_CUSTOMER ? redirect('/client') : redirect('/admin');
     }
 
     return back()->withErrors([
         'email' => 'The provided credentials do not match our records.',
     ])->onlyInput('email');
+});
+
+Route::post('/logout', function (Illuminate\Http\Request $request) {
+    Auth::logout();
+    $request->session()->invalidate();
+    $request->session()->regenerateToken();
+    return redirect('/');
+})->name('logout');
+
+Route::middleware('auth')->group(function () {
+    Route::get('/client', function () {
+        if (Auth::user()->role !== \App\Models\User::ROLE_CUSTOMER) {
+            return redirect('/admin');
+        }
+
+        $appointments = \App\Models\Appointment::with('barber')
+            ->where('customer_email', Auth::user()->email)
+            ->orderBy('start_at', 'desc')
+            ->get();
+
+        return view('client.dashboard', [
+            'appointments' => $appointments,
+            'user' => Auth::user(),
+        ]);
+    });
 });
 Route::get('/book', function () {
     $barbers = \App\Models\User::where('role', \App\Models\User::ROLE_BARBER)
@@ -66,7 +92,7 @@ Route::get('/book', function () {
             $user->avatar_url = $user->avatar_url ? Storage::url($user->avatar_url) : "https://i.pravatar.cc/400?u={$user->id}";
             return $user;
         });
-    $services = \App\Models\Service::all(['id', 'name', 'price', 'duration_minutes']);
+    $services = \App\Models\Service::all(['id', 'name', 'category', 'price', 'duration_minutes']);
     $appointments = \App\Models\Appointment::where('start_at', '>=', now()->startOfDay())
         ->get(['user_id', 'start_at'])
         ->map(function ($app) {
@@ -98,6 +124,7 @@ Route::post('/book', function (Illuminate\Http\Request $request) {
         'user_id' => 'required|exists:users,id',
         'customer_name' => 'required|string|max:255',
         'customer_phone' => 'required|string|min:10|max:255',
+        'customer_email' => 'nullable|email|max:255',
         'service' => 'required|string|max:255',
         'start_at' => 'required|date|after:now',
         'privacy_policy' => 'accepted',
@@ -132,6 +159,24 @@ Route::post('/book', function (Illuminate\Http\Request $request) {
 
     try {
         Mail::to($barber->email)->send(new AppointmentNotification($appointment, 'booked'));
+        
+        if (!empty($appointment->customer_email)) {
+            $generatedPassword = null;
+            $user = \App\Models\User::where('email', $appointment->customer_email)->first();
+            
+            if (!$user) {
+                $generatedPassword = \Illuminate\Support\Str::random(10);
+                \App\Models\User::create([
+                    'name' => $appointment->customer_name,
+                    'email' => $appointment->customer_email,
+                    'phone' => $appointment->customer_phone,
+                    'password' => \Illuminate\Support\Facades\Hash::make($generatedPassword),
+                    'role' => \App\Models\User::ROLE_CUSTOMER,
+                ]);
+            }
+
+            Mail::to($appointment->customer_email)->send(new ClientBookingConfirmation($appointment, $generatedPassword));
+        }
     } catch (\Exception $e) {
         \Illuminate\Support\Facades\Log::error('Failed to send booking email: ' . $e->getMessage());
     }
@@ -153,6 +198,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::post('/barbers/{barber}', [App\Http\Controllers\AdminController::class, 'updateBarber'])->name('admin.barbers.update');
 
     // New schedule routes
+    Route::get('/my-schedule', [App\Http\Controllers\AdminController::class, 'mySchedule'])->name('admin.my-schedule');
     Route::get('/barbers/{barber}/schedule', [App\Http\Controllers\AdminController::class, 'getSchedule'])->name('admin.barbers.schedule');
     Route::post('/barbers/{barber}/schedule', [App\Http\Controllers\AdminController::class, 'updateSchedule'])->name('admin.barbers.schedule.update');
     Route::post('/barbers/{barber}/days-off', [App\Http\Controllers\AdminController::class, 'addDayOff'])->name('admin.barbers.days-off.store');

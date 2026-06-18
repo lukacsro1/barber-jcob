@@ -1,12 +1,5 @@
 <template>
     <div class="min-h-screen flex items-center justify-center p-6 selection:bg-gold selection:text-dark">
-        <!-- Language Switcher -->
-        <div class="absolute top-8 right-8 flex gap-4 text-xs font-bold uppercase tracking-widest z-50">
-            <a href="/lang/ro" class="transition-colors" :class="locale === 'ro' ? 'text-gold' : 'text-gray-600 hover:text-white'">RO</a>
-            <span class="text-white/20">|</span>
-            <a href="/lang/hu" class="transition-colors" :class="locale === 'hu' ? 'text-gold' : 'text-gray-600 hover:text-white'">HU</a>
-        </div>
-
         <div class="w-full max-w-4xl">
             <!-- Brand -->
             <div class="text-center mb-12 animate-fade-in relative">
@@ -80,15 +73,23 @@
                                 <input id="customer_phone" name="customer_phone" v-model="form.customer_phone" type="text" required minlength="10" class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors placeholder:text-gray-700" placeholder="+40">
                             </div>
                             <div>
+                                <label for="customer_email" class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.your_email || 'Your Email (Optional)' }}</label>
+                                <input id="customer_email" name="customer_email" v-model="form.customer_email" type="email" class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors placeholder:text-gray-700" placeholder="hello@example.com">
+                            </div>
+                            <div>
                                 <label class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.the_service || 'The Service' }}</label>
                                 <select name="service" v-model="form.service" required class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors appearance-none cursor-pointer">
                                     <option value="" disabled>{{ translations.select_service || 'Select Service' }}</option>
-                                    <option v-for="service in services" :key="service.id" :value="service.name">{{ service.name }} — {{ service.price }} RON</option>
+                                    <optgroup v-for="(groupServices, category) in groupedServices" :key="category" :label="category" class="bg-[#111] text-gray-400 font-bold">
+                                        <option v-for="service in groupServices" :key="service.id" :value="service.name" class="text-white font-normal">
+                                            {{ service.name }} — {{ service.price }} RON
+                                        </option>
+                                    </optgroup>
                                 </select>
                             </div>
 
                             <!-- Calendar Component -->
-                            <div>
+                            <div v-if="form.service">
                                 <label class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.date_time || 'Date & Time' }}</label>
                                 <input type="hidden" name="start_at" :value="form.start_at" required>
 
@@ -135,6 +136,9 @@
                                     </div>
                                 </div>
                             </div>
+                            <div v-else class="p-6 bg-[#161616] border border-white/10 text-center animate-fade-in">
+                                <div class="text-xs text-gray-500 uppercase tracking-widest">{{ translations.please_select_service || 'Please select a service first to see available times.' }}</div>
+                            </div>
 
                             <!-- Privacy Policy Acceptance Checkbox -->
                             <div class="flex items-start gap-3 mt-6">
@@ -178,6 +182,7 @@ const selectedBarber = ref(null)
 const form = reactive({
     customer_name: '',
     customer_phone: '',
+    customer_email: '',
     service: '',
     start_at: '',
     privacy_policy: false
@@ -190,6 +195,16 @@ const selectedTime = ref(null)
 
 const monthName = computed(() => {
     return currentDate.value.toLocaleString('en-US', { month: 'long' })
+})
+
+const groupedServices = computed(() => {
+    const groups = {}
+    services.value.forEach(service => {
+        const cat = service.category || 'Alte Servicii'
+        if (!groups[cat]) groups[cat] = []
+        groups[cat].push(service)
+    })
+    return groups
 })
 
 const daysInMonth = computed(() => {
@@ -274,7 +289,10 @@ const generateSlots = (startTime, endTime) => {
 }
 
 const availableTimes = computed(() => {
-    if (!selectedDate.value || !selectedBarber.value) return allTimes
+    if (!selectedDate.value || !selectedBarber.value || !form.service) return []
+
+    const selectedServiceObj = services.value.find(s => s.name === form.service)
+    const selectedDuration = selectedServiceObj ? parseInt(selectedServiceObj.duration_minutes) : 30
 
     const d = selectedDate.value
     const year = d.getFullYear()
@@ -286,18 +304,45 @@ const availableTimes = computed(() => {
     const dayOfWeek = d.getDay()
     const schedule = selectedBarber.value.schedules?.find(s => s.day_of_week === dayOfWeek)
     
-    let activeSlots = allTimes
-    if (schedule && schedule.is_working && schedule.start_time && schedule.end_time) {
-        activeSlots = generateSlots(schedule.start_time, schedule.end_time)
-    } else if (schedule && !schedule.is_working) {
+    if (!schedule || !schedule.is_working || !schedule.start_time || !schedule.end_time) {
         return [] // Not working on this day of week
     }
 
+    const activeSlots = generateSlots(schedule.start_time, schedule.end_time)
+    
+    const shiftEndMinutes = schedule.end_time.split(':').map(Number).reduce((h, m) => h * 60 + m)
+
+    // Map booked appointments to start and end minutes
     const booked = appointments.value
         .filter(app => app.user_id === selectedBarber.value.id && app.date === dateStr)
-        .map(app => app.time)
+        .map(app => {
+            const appServiceObj = services.value.find(s => s.name === app.service)
+            const appDuration = appServiceObj ? parseInt(appServiceObj.duration_minutes) : 30
+            const [appH, appM] = app.time.split(':').map(Number)
+            const appStart = appH * 60 + appM
+            return {
+                start: appStart,
+                end: appStart + appDuration
+            }
+        })
 
-    let filtered = activeSlots.filter(time => !booked.includes(time))
+    let filtered = activeSlots.filter(time => {
+        const [h, m] = time.split(':').map(Number)
+        const slotStart = h * 60 + m
+        const slotEnd = slotStart + selectedDuration
+        
+        // 1. Check if the service fits within the shift
+        if (slotEnd > shiftEndMinutes) return false
+        
+        // 2. Check for overlaps with existing appointments
+        for (const app of booked) {
+            if (slotStart < app.end && slotEnd > app.start) {
+                return false // Overlap detected
+            }
+        }
+        
+        return true
+    })
 
     // Filter out past times if selectedDate is today
     const today = new Date()
@@ -367,6 +412,7 @@ onMounted(() => {
     const oldUserId = el.dataset.oldUserId || ''
     const oldName = el.dataset.oldName || ''
     const oldPhone = el.dataset.oldPhone || ''
+    const oldEmail = el.dataset.oldEmail || ''
     const oldService = el.dataset.oldService || ''
     const oldStartAt = el.dataset.oldStartAt || ''
     const oldPrivacyPolicy = el.dataset.oldPrivacyPolicy || ''
@@ -379,6 +425,7 @@ onMounted(() => {
     }
     if (oldName) form.customer_name = oldName
     if (oldPhone) form.customer_phone = oldPhone
+    if (oldEmail) form.customer_email = oldEmail
     if (oldService) form.service = oldService
     if (oldPrivacyPolicy) form.privacy_policy = true
     if (oldStartAt) {
