@@ -29,8 +29,8 @@
                     <div v-if="!selectedBarber" class="animate-fade-in">
                         <h2 class="text-2xl font-serif mb-8 text-white italic text-center">{{ translations.step1_title || 'Step 1: Choose Your Stylist' }}</h2>
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div 
-                                v-for="barber in barbers" 
+                            <div
+                                v-for="barber in barbers"
                                 :key="barber.id"
                                 @click="selectBarber(barber)"
                                 class="bg-[#161616] border border-white/5 hover:border-gold/30 transition-all cursor-pointer p-4 group text-center"
@@ -45,7 +45,11 @@
                     </div>
 
                     <!-- STEP 2: The Details -->
+
                     <div v-else class="animate-slide-up">
+                        <div class="flex justify-end">
+                            <a href="/" class="text-[19px] uppercase tracking-widest text-gold/60 hover:text-gold">{{ translations.return_home || 'Return Home' }}</a>
+                        </div>
                         <div class="flex items-center gap-4 mb-8 pb-8 border-b border-white/5">
                             <img :src="selectedBarber.avatar_url" class="w-16 h-16 rounded-full object-cover border border-gold/50">
                             <div>
@@ -53,6 +57,14 @@
                                 <div class="text-xl font-serif text-white italic">{{ selectedBarber.name }}</div>
                             </div>
                             <button @click="selectedBarber = null" class="ml-auto text-[9px] uppercase tracking-widest text-gold/60 hover:text-gold">{{ translations.change || 'Change' }}</button>
+                        </div>
+
+                        <!-- Validation Errors -->
+                        <div v-if="errors && errors.length" class="mb-8 p-6 bg-red-950/40 border border-red-500/20 text-red-200 text-xs tracking-wider font-semibold rounded animate-fade-in">
+                            <div class="font-bold mb-3 uppercase text-red-400 tracking-widest">{{ translations.please_correct || 'Please correct the following errors:' }}</div>
+                            <ul class="list-disc list-inside space-y-2">
+                                <li v-for="(error, index) in errors" :key="index">{{ error }}</li>
+                            </ul>
                         </div>
 
                         <form action="/book" method="POST" @submit="handleSubmit" class="space-y-8">
@@ -63,7 +75,10 @@
                                 <label for="customer_name" class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.your_name || 'Your Name' }}</label>
                                 <input id="customer_name" name="customer_name" v-model="form.customer_name" type="text" required class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors placeholder:text-gray-700" placeholder="John Doe">
                             </div>
-
+                            <div>
+                                <label for="customer_phone" class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.your_phone || 'Your Phone*' }}</label>
+                                <input id="customer_phone" name="customer_phone" v-model="form.customer_phone" type="text" required minlength="10" class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors placeholder:text-gray-700" placeholder="+40">
+                            </div>
                             <div>
                                 <label class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.the_service || 'The Service' }}</label>
                                 <select name="service" v-model="form.service" required class="w-full bg-[#161616] border border-white/10 px-4 py-4 text-white focus:outline-none focus:border-gold transition-colors appearance-none cursor-pointer">
@@ -76,7 +91,7 @@
                             <div>
                                 <label class="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">{{ translations.date_time || 'Date & Time' }}</label>
                                 <input type="hidden" name="start_at" :value="form.start_at" required>
-                                
+
                                 <div class="bg-[#161616] border border-white/10 p-6">
                                     <!-- Calendar Header -->
                                     <div class="flex justify-between items-center mb-6">
@@ -86,24 +101,28 @@
                                         </div>
                                         <button @click.prevent="nextMonth" class="w-8 h-8 flex items-center justify-center rounded-full border border-white/10 text-gold hover:border-gold transition-colors">&rarr;</button>
                                     </div>
-                                    
+
                                     <!-- Weekdays -->
                                     <div class="grid grid-cols-7 gap-1 mb-3 text-center text-[9px] uppercase tracking-widest text-gray-500 font-bold">
                                         <div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div><div>Su</div>
                                     </div>
-                                    
+
                                     <!-- Days Grid -->
                                     <div class="grid grid-cols-7 gap-1">
                                         <div v-for="(day, idx) in daysInMonth" :key="idx" class="aspect-square">
-                                            <button v-if="day" @click.prevent="selectDate(day)" 
+                                            <button v-if="day" :disabled="isPastDate(day)" @click.prevent="selectDate(day)"
                                                 class="w-full h-full flex items-center justify-center text-sm transition-all border rounded"
-                                                :class="{'bg-gold border-gold text-dark font-bold shadow-[0_0_15px_rgba(197,160,89,0.3)]': isSelectedDate(day), 'border-transparent text-gray-400 hover:border-gold/30 hover:text-gold': !isSelectedDate(day)}">
+                                                :class="{
+                                                    'bg-gold border-gold text-dark font-bold shadow-[0_0_15px_rgba(197,160,89,0.3)]': isSelectedDate(day),
+                                                    'opacity-20 cursor-not-allowed border-transparent text-gray-600': isPastDate(day),
+                                                    'border-transparent text-gray-400 hover:border-gold/30 hover:text-gold': !isSelectedDate(day) && !isPastDate(day)
+                                                }">
                                                 {{ day.getDate() }}
                                             </button>
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Time Slots -->
                                 <div v-if="selectedDate" class="mt-4 p-6 bg-[#161616] border border-white/10 animate-fade-in">
                                     <div class="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-4 text-center">{{ translations.available_times_for || 'Available Times for' }} {{ formattedSelectedDate }}</div>
@@ -117,7 +136,16 @@
                                 </div>
                             </div>
 
-                            <button type="submit" :disabled="loading || !form.start_at" class="w-full bg-gold text-dark font-bold py-5 uppercase tracking-[0.3em] text-xs hover:bg-gold-light transition-all transform active:scale-[0.99] disabled:opacity-50 mt-4 shadow-[0_0_30px_rgba(197,160,89,0.2)]">
+                            <!-- Privacy Policy Acceptance Checkbox -->
+                            <div class="flex items-start gap-3 mt-6">
+                                <input id="privacy_policy" name="privacy_policy" type="checkbox" v-model="form.privacy_policy" value="1" required class="w-4 h-4 mt-0.5 rounded border-white/10 bg-[#161616] text-gold focus:ring-gold focus:ring-offset-0 focus:outline-none accent-gold cursor-pointer">
+                                <label for="privacy_policy" class="text-xs text-gray-400 select-none cursor-pointer leading-tight">
+                                    {{ translations.privacy_policy_accept || 'I agree to the' }}
+                                    <a href="/politica-de-confidentialitate" target="_blank" class="text-gold hover:underline font-semibold">{{ translations.privacy_policy_link || 'privacy policy' }}</a>
+                                </label>
+                            </div>
+
+                            <button type="submit" :disabled="loading || !form.start_at || !form.privacy_policy" class="w-full bg-gold text-dark font-bold py-5 uppercase tracking-[0.3em] text-xs hover:bg-gold-light transition-all transform active:scale-[0.99] disabled:opacity-50 mt-4 shadow-[0_0_30px_rgba(197,160,89,0.2)]">
                                 <span v-if="!loading">{{ translations.confirm_appointment || 'Confirm Appointment' }}</span>
                                 <span v-else>{{ translations.processing_ritual || 'Processing Ritual...' }}</span>
                             </button>
@@ -143,13 +171,16 @@ const appointments = ref([])
 const translations = ref({})
 const locale = ref('ro')
 const successMsg = ref('')
+const errors = ref([])
 const loading = ref(false)
 const selectedBarber = ref(null)
 
 const form = reactive({
     customer_name: '',
+    customer_phone: '',
     service: '',
-    start_at: ''
+    start_at: '',
+    privacy_policy: false
 })
 
 // Calendar State
@@ -166,9 +197,9 @@ const daysInMonth = computed(() => {
     const month = currentDate.value.getMonth()
     const days = new Date(year, month + 1, 0).getDate()
     const firstDay = new Date(year, month, 1).getDay()
-    
+
     const startDay = firstDay === 0 ? 6 : firstDay - 1
-    
+
     const calendar = []
     for(let i=0; i<startDay; i++) {
         calendar.push(null)
@@ -221,9 +252,26 @@ const formattedSelectedDate = computed(() => {
 })
 
 const allTimes = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', 
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00',
     '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
 ]
+
+const generateSlots = (startTime, endTime) => {
+    const slots = []
+    let [currH, currM] = startTime.split(':').map(Number)
+    const [endH, endM] = endTime.split(':').map(Number)
+    
+    const endTotal = endH * 60 + endM
+    let currTotal = currH * 60 + currM
+    
+    while (currTotal < endTotal) {
+        const hStr = String(Math.floor(currTotal / 60)).padStart(2, '0')
+        const mStr = String(currTotal % 60).padStart(2, '0')
+        slots.push(`${hStr}:${mStr}`)
+        currTotal += 30
+    }
+    return slots
+}
 
 const availableTimes = computed(() => {
     if (!selectedDate.value || !selectedBarber.value) return allTimes
@@ -234,12 +282,67 @@ const availableTimes = computed(() => {
     const day = String(d.getDate()).padStart(2, '0')
     const dateStr = `${year}-${month}-${day}`
 
+    // Get schedule for this day of week
+    const dayOfWeek = d.getDay()
+    const schedule = selectedBarber.value.schedules?.find(s => s.day_of_week === dayOfWeek)
+    
+    let activeSlots = allTimes
+    if (schedule && schedule.is_working && schedule.start_time && schedule.end_time) {
+        activeSlots = generateSlots(schedule.start_time, schedule.end_time)
+    } else if (schedule && !schedule.is_working) {
+        return [] // Not working on this day of week
+    }
+
     const booked = appointments.value
         .filter(app => app.user_id === selectedBarber.value.id && app.date === dateStr)
         .map(app => app.time)
 
-    return allTimes.filter(time => !booked.includes(time))
+    let filtered = activeSlots.filter(time => !booked.includes(time))
+
+    // Filter out past times if selectedDate is today
+    const today = new Date()
+    if (d.toDateString() === today.toDateString()) {
+        const currentHour = today.getHours()
+        const currentMinute = today.getMinutes()
+        filtered = filtered.filter(time => {
+            const [hour, minute] = time.split(':').map(Number)
+            if (hour > currentHour) return true
+            if (hour === currentHour && minute > currentMinute) return true
+            return false
+        })
+    }
+
+    return filtered
 })
+
+const isPastDate = (date) => {
+    if (!date) return true
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (date < today) return true
+
+    // If a barber is selected, check if they are working on this day
+    if (selectedBarber.value) {
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        const dateStr = `${year}-${month}-${day}`
+        
+        // Check Day Off
+        if (selectedBarber.value.days_off) {
+            const hasDayOff = selectedBarber.value.days_off.some(dOff => dOff.date.split('T')[0] === dateStr)
+            if (hasDayOff) return true
+        }
+        
+        // Check Weekday Schedule
+        if (selectedBarber.value.schedules) {
+            const dayOfWeek = date.getDay()
+            const schedule = selectedBarber.value.schedules.find(s => s.day_of_week === dayOfWeek)
+            if (!schedule || !schedule.is_working) return true
+        }
+    }
+    return false
+}
 
 onMounted(() => {
     const el = document.getElementById('booking-app')
@@ -250,6 +353,7 @@ onMounted(() => {
     translations.value = JSON.parse(el.dataset.translations || '{}')
     locale.value = el.dataset.locale || 'ro'
     successMsg.value = el.dataset.success || ''
+    errors.value = JSON.parse(el.dataset.errors || '[]')
 
     // Handle pre-selected barber from URL
     const urlParams = new URLSearchParams(window.location.search)
@@ -257,6 +361,34 @@ onMounted(() => {
     if (barberId) {
         const found = barbers.value.find(b => b.id == barberId)
         if (found) selectedBarber.value = found
+    }
+
+    // Restore old inputs if present (e.g. after validation error redirect)
+    const oldUserId = el.dataset.oldUserId || ''
+    const oldName = el.dataset.oldName || ''
+    const oldPhone = el.dataset.oldPhone || ''
+    const oldService = el.dataset.oldService || ''
+    const oldStartAt = el.dataset.oldStartAt || ''
+    const oldPrivacyPolicy = el.dataset.oldPrivacyPolicy || ''
+
+    if (oldUserId) {
+        const found = barbers.value.find(b => b.id == oldUserId)
+        if (found) {
+            selectedBarber.value = found
+        }
+    }
+    if (oldName) form.customer_name = oldName
+    if (oldPhone) form.customer_phone = oldPhone
+    if (oldService) form.service = oldService
+    if (oldPrivacyPolicy) form.privacy_policy = true
+    if (oldStartAt) {
+        form.start_at = oldStartAt
+        const parts = oldStartAt.split('T')
+        if (parts.length === 2) {
+            const dateParts = parts[0].split('-').map(Number)
+            selectedDate.value = new Date(dateParts[0], dateParts[1] - 1, dateParts[2])
+            selectedTime.value = parts[1]
+        }
     }
 })
 

@@ -19,6 +19,13 @@
             data-services="{{ json_encode($services) }}"
             data-appointments="{{ json_encode($appointments) }}"
             data-success="{{ session('success') }}"
+            data-errors="{{ json_encode($errors->all()) }}"
+            data-old-user-id="{{ old('user_id') }}"
+            data-old-name="{{ old('customer_name') }}"
+            data-old-phone="{{ old('customer_phone') }}"
+            data-old-service="{{ old('service') }}"
+            data-old-start-at="{{ old('start_at') }}"
+            data-old-privacy-policy="{{ old('privacy_policy') }}"
             data-translations="{{ json_encode($translations) }}"
             data-locale="{{ $locale }}"
         ></div>

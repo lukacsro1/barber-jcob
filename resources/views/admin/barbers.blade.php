@@ -16,8 +16,9 @@
     </header>
 
     <!-- Vue Barber Management -->
-    <div id="barber-management" 
+    <div id="barber-management"
          data-barbers="{{ json_encode($barbers) }}">
     </div>
 </div>
+
 @endsection

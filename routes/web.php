@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\AppointmentNotification;
 
 use App\Models\Shop;
 use App\Models\User;
@@ -15,9 +17,9 @@ Route::get('/', function () {
             $user->avatar_url = $user->avatar_url ? Storage::url($user->avatar_url) : "https://i.pravatar.cc/400?u={$user->id}";
             return $user;
         });
-    
+
     $translations = __('gallery');
-    
+
     return view('welcome', [
         'barbers' => $barbers,
         'translations' => $translations,
@@ -55,10 +57,10 @@ Route::post('/login', function (Illuminate\Http\Request $request) {
         'email' => 'The provided credentials do not match our records.',
     ])->onlyInput('email');
 });
-
 Route::get('/book', function () {
     $barbers = \App\Models\User::where('role', \App\Models\User::ROLE_BARBER)
         ->orWhere('show_in_gallery', true)
+        ->with(['schedules', 'daysOff'])
         ->get(['id', 'name', 'avatar_url'])
         ->map(function ($user) {
             $user->avatar_url = $user->avatar_url ? Storage::url($user->avatar_url) : "https://i.pravatar.cc/400?u={$user->id}";
@@ -74,7 +76,7 @@ Route::get('/book', function () {
                 'time' => \Carbon\Carbon::parse($app->start_at)->format('H:i'),
             ];
         });
-    
+
     return view('booking', [
         'barbers' => $barbers,
         'services' => $services,
@@ -85,15 +87,54 @@ Route::get('/book', function () {
 });
 
 
+Route::get('/politica-de-confidentialitate', function () {
+    return view('privacy-policy', [
+        'locale' => app()->getLocale(),
+    ]);
+});
+
 Route::post('/book', function (Illuminate\Http\Request $request) {
     $data = $request->validate([
         'user_id' => 'required|exists:users,id',
         'customer_name' => 'required|string|max:255',
+        'customer_phone' => 'required|string|min:10|max:255',
         'service' => 'required|string|max:255',
         'start_at' => 'required|date|after:now',
+        'privacy_policy' => 'accepted',
+    ], [
+        'privacy_policy.accepted' => __('booking.validation_privacy_policy'),
     ]);
 
-    \App\Models\Appointment::create($data);
+    $startAt = \Carbon\Carbon::parse($data['start_at']);
+    $barber = \App\Models\User::findOrFail($data['user_id']);
+
+    // Check Day Off
+    $hasDayOff = $barber->daysOff()->whereDate('date', $startAt->toDateString())->exists();
+    if ($hasDayOff) {
+        return back()->withErrors(['start_at' => __('booking.validation_day_off')])->withInput();
+    }
+
+    // Check Weekday Schedule
+    $dayOfWeek = $startAt->dayOfWeek; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    $schedule = $barber->schedules()->where('day_of_week', $dayOfWeek)->first();
+    if (!$schedule || !$schedule->is_working) {
+        return back()->withErrors(['start_at' => __('booking.validation_not_working_day')])->withInput();
+    }
+
+    $timeStr = $startAt->format('H:i:s');
+    if ($timeStr < $schedule->start_time || $timeStr >= $schedule->end_time) {
+        return back()->withErrors(['start_at' => __('booking.validation_out_of_hours')])->withInput();
+    }
+
+    // Unset privacy_policy before creating the appointment if it's not in the database table
+    unset($data['privacy_policy']);
+    $appointment = \App\Models\Appointment::create($data);
+
+    try {
+        Mail::to($barber->email)->send(new AppointmentNotification($appointment, 'booked'));
+    } catch (\Exception $e) {
+        \Illuminate\Support\Facades\Log::error('Failed to send booking email: ' . $e->getMessage());
+    }
 
     return back()->with('success', 'Your appointment has been booked successfully!');
 });
@@ -101,18 +142,33 @@ Route::post('/book', function (Illuminate\Http\Request $request) {
 
 Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::get('/', [App\Http\Controllers\AdminController::class, 'dashboard'])->name('admin.dashboard');
-    
-    // Placeholder for other admin routes
+
     Route::get('/appointments', [App\Http\Controllers\AdminController::class, 'appointments'])->name('admin.appointments');
-    
+    Route::post('/appointments', [App\Http\Controllers\AdminController::class, 'storeAppointment'])->name('admin.appointments.store');
+    Route::post('/appointments/{appointment}', [App\Http\Controllers\AdminController::class, 'updateAppointment'])->name('admin.appointments.update');
+    Route::delete('/appointments/{appointment}', [App\Http\Controllers\AdminController::class, 'deleteAppointment'])->name('admin.appointments.delete');
+
     Route::get('/barbers', [App\Http\Controllers\AdminController::class, 'barbers'])->name('admin.barbers');
     Route::post('/barbers', [App\Http\Controllers\AdminController::class, 'storeBarber'])->name('admin.barbers.store');
     Route::post('/barbers/{barber}', [App\Http\Controllers\AdminController::class, 'updateBarber'])->name('admin.barbers.update');
-    
+
+    // New schedule routes
+    Route::get('/barbers/{barber}/schedule', [App\Http\Controllers\AdminController::class, 'getSchedule'])->name('admin.barbers.schedule');
+    Route::post('/barbers/{barber}/schedule', [App\Http\Controllers\AdminController::class, 'updateSchedule'])->name('admin.barbers.schedule.update');
+    Route::post('/barbers/{barber}/days-off', [App\Http\Controllers\AdminController::class, 'addDayOff'])->name('admin.barbers.days-off.store');
+    Route::delete('/barbers/{barber}/days-off/{dayOff}', [App\Http\Controllers\AdminController::class, 'deleteDayOff'])->name('admin.barbers.days-off.delete');
+
     Route::post('/profile', [App\Http\Controllers\AdminController::class, 'updateProfile'])->name('admin.profile.update');
-    
+
+
     Route::post('/services', [App\Http\Controllers\AdminController::class, 'storeService'])->name('admin.services.store');
     Route::delete('/services/{service}', [App\Http\Controllers\AdminController::class, 'deleteService'])->name('admin.services.delete');
+
+    Route::get('/clients', [App\Http\Controllers\AdminController::class, 'getClients'])->name('admin.clients');
+    Route::post('/clients', [App\Http\Controllers\AdminController::class, 'storeClient'])->name('admin.clients.store');
+    Route::post('/clients/{client}', [App\Http\Controllers\AdminController::class, 'updateClient'])->name('admin.clients.update');
+
+    Route::get('/services', [App\Http\Controllers\AdminController::class, 'services'])->name('admin.services');
 
     Route::post('/logout', function () {
         Auth::logout();

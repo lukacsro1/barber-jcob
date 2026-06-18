@@ -60,19 +60,29 @@
                     <div 
                         v-for="slot in timeSlots" 
                         :key="slot.time"
-                        class="group bg-[#111] border border-white/5 rounded-xl p-4 flex items-center gap-6 hover:border-gold/30 transition-all relative overflow-hidden"
+                        @click="handleSlotClick(slot)"
+                        class="group bg-[#111] border border-white/5 rounded-xl p-4 flex items-center gap-6 hover:border-gold/30 transition-all relative overflow-hidden cursor-pointer"
                     >
                         <div class="w-20 text-xs font-bold text-gray-400 tracking-widest">{{ slot.time }}</div>
                         
                         <div v-if="slot.appointment" class="flex-1 flex items-center justify-between">
                             <div>
-                                <div class="text-sm font-medium text-white">{{ slot.appointment.customer_name }}</div>
+                                <div class="text-sm font-medium text-white group-hover:text-gold transition-colors">{{ slot.appointment.customer_name }}</div>
+                                <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">{{ slot.appointment.customer_phone }}</div>
                                 <div class="text-[10px] uppercase tracking-widest text-gold/60 font-bold">{{ slot.appointment.service }}</div>
                             </div>
                             <div class="text-right">
-                                <div class="text-[10px] text-gray-500 uppercase font-bold">{{ slot.appointment.barber.name }}</div>
+                                <div class="text-[10px] text-gray-500 uppercase font-bold">{{ slot.appointment.barber ? slot.appointment.barber.name : 'Unknown' }}</div>
                                 <div class="flex gap-1 mt-1 justify-end">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></span>
+                                    <span class="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" 
+                                        :class="{
+                                            'bg-gold/10 text-gold border border-gold/20': slot.appointment.status === 'scheduled',
+                                            'bg-green-500/10 text-green-400 border border-green-500/20': slot.appointment.status === 'completed',
+                                            'bg-red-500/10 text-red-400 border border-red-500/20': slot.appointment.status === 'cancelled',
+                                        }"
+                                    >
+                                        {{ slot.appointment.status || 'scheduled' }}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -83,7 +93,13 @@
                         </div>
 
                         <!-- Status Indicator line -->
-                        <div v-if="slot.appointment" class="absolute left-0 top-0 h-full w-[2px] bg-gold"></div>
+                        <div v-if="slot.appointment" class="absolute left-0 top-0 h-full w-[2px]"
+                            :class="{
+                                'bg-gold': slot.appointment.status === 'scheduled',
+                                'bg-green-500': slot.appointment.status === 'completed',
+                                'bg-red-500': slot.appointment.status === 'cancelled',
+                            }"
+                        ></div>
                     </div>
                 </div>
             </div>
@@ -108,11 +124,82 @@
                 </div>
             </div>
         </div>
+
+        <!-- Appointment Edit/Create Modal -->
+        <Teleport to="body">
+            <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                <div class="bg-[#111] border border-white/10 w-full max-w-md p-8 shadow-2xl relative animate-fade-in text-left">
+                    <button @click="closeModal" class="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors text-2xl">&times;</button>
+                    <h3 class="text-2xl font-serif text-white italic mb-6">
+                        {{ isEditMode ? 'Edit Appointment' : 'Book Appointment' }}
+                    </h3>
+                    
+                    <form @submit.prevent="submitForm" class="space-y-4">
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Barber</label>
+                            <select v-model="form.user_id" required :disabled="userRole !== 'admin'" class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm cursor-pointer disabled:opacity-50">
+                                <option v-for="barber in barbers" :key="barber.id" :value="barber.id">{{ barber.name }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Customer Name</label>
+                            <input v-model="form.customer_name" type="text" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Customer Phone</label>
+                            <input v-model="form.customer_phone" type="text" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Service</label>
+                            <select v-model="form.service" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm cursor-pointer">
+                                <option value="" disabled>Select Service</option>
+                                <option v-for="service in services" :key="service.id" :value="service.name">{{ service.name }} ({{ service.price }} RON)</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Date</label>
+                                <input v-model="form.date" type="date" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Time</label>
+                                <select v-model="form.time" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm cursor-pointer">
+                                    <option v-for="timeStr in availableTimeOptions" :key="timeStr" :value="timeStr">{{ timeStr }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div v-if="isEditMode">
+                            <label class="block text-[10px] uppercase tracking-widest text-gray-400 mb-2 font-bold">Status</label>
+                            <select v-model="form.status" required class="w-full bg-[#161616] border border-white/10 px-4 py-3 text-white focus:outline-none focus:border-gold transition-colors text-sm cursor-pointer">
+                                <option value="scheduled">Scheduled</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+
+                        <div class="pt-4 flex flex-col gap-2">
+                            <button type="submit" :disabled="loading" class="w-full bg-gold text-dark font-bold py-4 uppercase tracking-[0.2em] text-xs hover:bg-gold-light transition-all shadow-[0_0_15px_rgba(197,160,89,0.2)] disabled:opacity-50">
+                                <span v-if="!loading">{{ isEditMode ? 'Update Appointment' : 'Book Appointment' }}</span>
+                                <span v-else>Saving...</span>
+                            </button>
+                            <button v-if="isEditMode" type="button" @click="deleteAppointment" :disabled="loading" class="w-full bg-red-950/40 border border-red-500/20 text-red-200 font-bold py-4 uppercase tracking-[0.2em] text-xs hover:bg-red-900/40 transition-all disabled:opacity-50">
+                                <span v-if="!loading">Cancel / Delete Appointment</span>
+                                <span v-else>Deleting...</span>
+                            </button>
+                        </div>
+                        
+                        <div v-if="errorMsg" class="text-red-400 text-[10px] uppercase tracking-widest mt-4 text-center bg-red-400/10 py-3 border border-red-400/20">
+                            {{ errorMsg }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </Teleport>
     </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 
 const props = defineProps({
     appointments: {
@@ -122,16 +209,43 @@ const props = defineProps({
     barbers: {
         type: Array,
         default: () => []
+    },
+    services: {
+        type: Array,
+        default: () => []
     }
 })
 
 // State
 const today = new Date()
+const appointments = ref([...props.appointments])
 const selectedDate = ref(new Date())
 const selectedBarberId = ref(null)
 const currentMonth = ref(today.getMonth())
 const currentYear = ref(today.getFullYear())
 const userRole = ref('')
+const scrollContainer = ref(null)
+
+// Modal state
+const isModalOpen = ref(false)
+const isEditMode = ref(false)
+const editingAppointmentId = ref(null)
+const loading = ref(false)
+const errorMsg = ref('')
+
+const form = reactive({
+    user_id: '',
+    customer_name: '',
+    customer_phone: '',
+    service: '',
+    date: '',
+    time: '',
+    status: 'scheduled'
+})
+
+const availableTimeOptions = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'
+]
 
 // Data Computed
 const currentMonthName = computed(() => {
@@ -139,7 +253,6 @@ const currentMonthName = computed(() => {
 })
 
 const daysInMonth = computed(() => {
-    const date = new Date(currentYear.value, currentMonth.value, 1)
     const days = []
     const lastDay = new Date(currentYear.value, currentMonth.value + 1, 0).getDate()
 
@@ -168,7 +281,7 @@ const timeSlots = computed(() => {
         const timeStr = `${hour.toString().padStart(2, '0')}:00`
         
         // Find appointment that matches this day, hour, and (optionally) barber
-        const app = props.appointments.find(a => {
+        const app = appointments.value.find(a => {
             const appDate = new Date(a.start_at)
             const appDateStr = appDate.toISOString().split('T')[0]
             const appHour = appDate.getHours()
@@ -188,7 +301,14 @@ const timeSlots = computed(() => {
 })
 
 const bookedCount = computed(() => timeSlots.value.filter(s => s.appointment).length)
-const estimatedRevenue = computed(() => bookedCount.value * 150) // Assuming 150 RON average
+const estimatedRevenue = computed(() => {
+    return timeSlots.value.reduce((total, slot) => {
+        if (!slot.appointment) return total
+        const serviceObj = props.services.find(s => s.name === slot.appointment.service)
+        const price = serviceObj ? parseFloat(serviceObj.price) : 150
+        return total + price
+    }, 0)
+})
 
 // Actions
 const selectDay = (day) => {
@@ -197,6 +317,160 @@ const selectDay = (day) => {
 
 const isSelected = (day) => {
     return selectedDate.value.toISOString().split('T')[0] === day.dateString
+}
+
+const scrollDays = (direction) => {
+    if (scrollContainer.value) {
+        scrollContainer.value.scrollBy({
+            left: direction * 200,
+            behavior: 'smooth'
+        })
+    }
+}
+
+const handleSlotClick = (slot) => {
+    if (slot.appointment) {
+        openEditModal(slot.appointment)
+    } else {
+        openCreateModal(slot.time)
+    }
+}
+
+const openCreateModal = (timeStr) => {
+    isEditMode.value = false
+    editingAppointmentId.value = null
+    errorMsg.value = ''
+    
+    form.user_id = selectedBarberId.value || (props.barbers[0] ? props.barbers[0].id : '')
+    form.customer_name = ''
+    form.customer_phone = ''
+    form.service = props.services[0] ? props.services[0].name : ''
+    
+    const d = selectedDate.value
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    form.date = `${year}-${month}-${day}`
+    
+    form.time = timeStr || '09:00'
+    form.status = 'scheduled'
+    
+    isModalOpen.value = true
+}
+
+const openEditModal = (app) => {
+    isEditMode.value = true
+    editingAppointmentId.value = app.id
+    errorMsg.value = ''
+    
+    form.user_id = app.user_id
+    form.customer_name = app.customer_name
+    form.customer_phone = app.customer_phone
+    form.service = app.service
+    
+    const appDate = new Date(app.start_at)
+    const year = appDate.getFullYear()
+    const month = String(appDate.getMonth() + 1).padStart(2, '0')
+    const day = String(appDate.getDate()).padStart(2, '0')
+    form.date = `${year}-${month}-${day}`
+    
+    const hours = String(appDate.getHours()).padStart(2, '0')
+    const minutes = String(appDate.getMinutes()).padStart(2, '0')
+    form.time = `${hours}:${minutes}`
+    
+    form.status = app.status || 'scheduled'
+    
+    isModalOpen.value = true
+}
+
+const closeModal = () => {
+    isModalOpen.value = false
+    isEditMode.value = false
+    editingAppointmentId.value = null
+    errorMsg.value = ''
+}
+
+const submitForm = async () => {
+    loading.value = true
+    errorMsg.value = ''
+    try {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        const startAt = `${form.date} ${form.time}:00`
+        
+        const payload = {
+            user_id: form.user_id,
+            customer_name: form.customer_name,
+            customer_phone: form.customer_phone,
+            service: form.service,
+            start_at: startAt,
+            status: form.status
+        }
+        
+        const url = isEditMode.value 
+            ? `/admin/appointments/${editingAppointmentId.value}` 
+            : '/admin/appointments'
+            
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        
+        if (!response.ok) {
+            const data = await response.json()
+            throw new Error(data.message || 'An error occurred while saving.')
+        }
+        
+        const savedApp = await response.json()
+        
+        if (isEditMode.value) {
+            const idx = appointments.value.findIndex(a => a.id === savedApp.id)
+            if (idx !== -1) {
+                appointments.value[idx] = savedApp
+            }
+        } else {
+            appointments.value.push(savedApp)
+        }
+        
+        closeModal()
+    } catch (err) {
+        errorMsg.value = err.message
+    } finally {
+        loading.value = false
+    }
+}
+
+const deleteAppointment = async () => {
+    if (!confirm('Are you sure you want to cancel/delete this appointment?')) return
+    
+    loading.value = true
+    errorMsg.value = ''
+    try {
+        const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        const response = await fetch(`/admin/appointments/${editingAppointmentId.value}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': token,
+                'Accept': 'application/json'
+            }
+        })
+        
+        if (!response.ok) {
+            const data = await response.json()
+            throw new Error(data.message || 'An error occurred while deleting.')
+        }
+        
+        appointments.value = appointments.value.filter(a => a.id !== editingAppointmentId.value)
+        closeModal()
+    } catch (err) {
+        errorMsg.value = err.message
+    } finally {
+        loading.value = false
+    }
 }
 
 onMounted(() => {

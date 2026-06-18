@@ -1,24 +1,24 @@
 <template>
     <ul class="flex flex-col gap-y-1 mt-4 px-2">
         <li v-for="item in menuItems" :key="item.path">
-            <a 
+            <a
                 :href="'/' + item.path"
                 class="relative flex flex-row items-center gap-x-3 w-full rounded-lg px-3 py-2 outline-none transition duration-75 hover:bg-gray-100 focus-visible:bg-gray-100 dark:hover:bg-white/5 dark:focus-visible:bg-white/5"
                 :class="isActive(item.path) ? 'bg-gray-100 dark:bg-white/5' : ''"
             >
-                <div 
+                <div
                     class="flex items-center justify-center shrink-0 w-6 h-6"
-                    :class="isActive(item.path) 
-                        ? 'text-amber-600 dark:text-amber-500' 
+                    :class="isActive(item.path)
+                        ? 'text-gold'
                         : 'text-gray-400 dark:text-gray-500'"
                 >
                     <component :is="item.icon" class="w-full h-full stroke-2" />
                 </div>
 
-                <span 
+                <span
                     class="flex-1 truncate text-left text-sm font-medium"
-                    :class="isActive(item.path) 
-                        ? 'text-amber-600 dark:text-amber-500' 
+                    :class="isActive(item.path)
+                        ? 'text-gold'
                         : 'text-gray-700 dark:text-gray-200'"
                 >
                     {{ item.label }}
@@ -30,7 +30,8 @@
 
 <script setup>
 import { computed } from 'vue'
-import { HomeIcon, CalendarIcon, UsersIcon } from '@heroicons/vue/24/outline'
+
+import { HomeIcon, CalendarIcon, UsersIcon, PlusCircleIcon } from '@heroicons/vue/24/outline'
 
 const props = defineProps({
     currentPath: {
@@ -54,7 +55,13 @@ const menuItems = computed(() => {
             label: 'Appointments',
             path: 'admin/appointments',
             icon: CalendarIcon
+        },
+         {
+            label: 'Clients',
+            path: 'admin/clients',
+            icon: UsersIcon,
         }
+
     ]
 
     if (props.userData.role === 'admin') {
@@ -63,7 +70,14 @@ const menuItems = computed(() => {
             path: 'admin/barbers',
             icon: UsersIcon
         })
+        items.push({
+            label: 'Services',
+            path: 'admin/services',
+            icon: PlusCircleIcon
+        })
+
     }
+
 
     return items
 })

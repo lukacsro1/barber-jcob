@@ -16,6 +16,7 @@
     <div id="appointment-calendar" 
          data-appointments="{{ json_encode($appointments) }}"
          data-barbers="{{ json_encode($barbers) }}"
+         data-services="{{ json_encode($services) }}"
          data-role="{{ $user['role'] }}">
     </div>
 </div>
