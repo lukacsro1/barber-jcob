@@ -214,6 +214,7 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::post('/clients', [App\Http\Controllers\AdminController::class, 'storeClient'])->name('admin.clients.store');
     Route::post('/clients/import', [App\Http\Controllers\AdminController::class, 'importClients'])->name('admin.clients.import');
     Route::post('/clients/{client}', [App\Http\Controllers\AdminController::class, 'updateClient'])->name('admin.clients.update');
+    Route::delete('/clients/{client}', [App\Http\Controllers\AdminController::class, 'deleteClient'])->name('admin.clients.delete');
 
     Route::get('/services', [App\Http\Controllers\AdminController::class, 'services'])->name('admin.services');
 

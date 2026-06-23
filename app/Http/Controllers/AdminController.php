@@ -329,6 +329,16 @@ class AdminController extends Controller
         return response()->json($client);
     }
 
+    public function deleteClient(User $client)
+    {
+        abort_if(!auth()->user()->isAdmin(), 403);
+        abort_if($client->role !== User::ROLE_CUSTOMER, 403);
+
+        $client->delete();
+
+        return response()->json(['success' => true]);
+    }
+
     public function mySchedule()
     {
         return view('admin.my-schedule', [
