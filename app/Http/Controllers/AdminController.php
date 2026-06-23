@@ -236,6 +236,83 @@ class AdminController extends Controller
         return response()->json($client);
     }
 
+    public function importClients(Request $request)
+    {
+        abort_if(!auth()->user()->isAdmin(), 403);
+
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:2048',
+        ]);
+
+        $file = $request->file('file');
+        $handle = fopen($file->getRealPath(), 'r');
+        
+        // Read first line to detect delimiter
+        $firstLine = fgets($handle);
+        $delimiter = strpos($firstLine, ';') !== false ? ';' : ',';
+        rewind($handle);
+
+        $header = fgetcsv($handle, 1000, $delimiter);
+        if (!$header) {
+            return response()->json(['message' => 'Invalid CSV file format.'], 422);
+        }
+
+        // Normalize headers: lowercase and trim
+        $header = array_map(function($col) {
+            // Remove BOM if present
+            $col = preg_replace('/[\x00-\x1F\x80-\xFF]/', '', $col);
+            return strtolower(trim($col));
+        }, $header);
+
+        $importedCount = 0;
+        $errors = [];
+        $rowNumber = 1;
+
+        while (($row = fgetcsv($handle, 1000, $delimiter)) !== false) {
+            $rowNumber++;
+            if (count($header) !== count($row)) continue;
+            
+            $data = array_combine($header, $row);
+            
+            $name = trim($data['nev'] ?? '');
+            $phone = trim($data['telefonszam'] ?? '');
+            $email = trim($data['email'] ?? '');
+
+            if (empty($name)) {
+                $errors[] = "Row $rowNumber: Name (nev) is required.";
+                continue;
+            }
+
+            // Generate a dummy email if empty
+            if (empty($email)) {
+                $email = 'no-email-' . uniqid() . '@domain.local';
+            }
+
+            // Check if user exists by email
+            if (User::where('email', $email)->exists()) {
+                // Skip or handle existing. For now, skip to avoid errors.
+                $errors[] = "Row $rowNumber: User with email $email already exists.";
+                continue;
+            }
+
+            User::create([
+                'name' => $name,
+                'email' => $email,
+                'phone' => $phone,
+                'password' => Hash::make(Str::random(16)),
+                'role' => User::ROLE_CUSTOMER,
+            ]);
+
+            $importedCount++;
+        }
+        fclose($handle);
+
+        return response()->json([
+            'message' => "Successfully imported $importedCount clients.",
+            'errors' => $errors
+        ]);
+    }
+
     public function updateClient(Request $request, User $client)
     {
         abort_if(!auth()->user()->isAdmin(), 403);
