@@ -11,6 +11,7 @@ class BarberSchedule extends Model
 {
     protected $casts = [
         'is_working' => 'boolean',
+        'day_of_week' => 'integer',
     ];
 
     public function barber(): BelongsTo
