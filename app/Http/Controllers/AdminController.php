@@ -202,8 +202,6 @@ class AdminController extends Controller
 
     public function getClients()
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
-
         $clients = User::where('role', User::ROLE_CUSTOMER)
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'phone']);
@@ -220,8 +218,6 @@ class AdminController extends Controller
 
     public function storeClient(Request $request)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
-
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
@@ -238,8 +234,6 @@ class AdminController extends Controller
 
     public function importClients(Request $request)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
-
         $request->validate([
             'file' => 'required|file|mimes:csv,txt|max:2048',
         ]);
@@ -315,7 +309,6 @@ class AdminController extends Controller
 
     public function updateClient(Request $request, User $client)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
         abort_if($client->role !== User::ROLE_CUSTOMER, 403);
 
         $data = $request->validate([
@@ -331,7 +324,6 @@ class AdminController extends Controller
 
     public function deleteClient(User $client)
     {
-        abort_if(!auth()->user()->isAdmin(), 403);
         abort_if($client->role !== User::ROLE_CUSTOMER, 403);
 
         $client->delete();
