@@ -115,7 +115,6 @@
                         ></div>
                     </div>
                 </div>
-                </div>
 
                 <!-- List View (All Appointments) -->
                 <div v-else class="space-y-3">
