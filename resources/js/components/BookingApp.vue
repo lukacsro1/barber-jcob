@@ -40,9 +40,9 @@
                     <!-- STEP 2: The Details -->
 
                     <div v-else class="animate-slide-up">
-                        <div class="flex justify-end">
+                        <!-- <div class="flex justify-end">
                             <a href="/" class="text-[19px] uppercase tracking-widest text-gold/60 hover:text-gold">{{ translations.return_home || 'Return Home' }}</a>
-                        </div>
+                        </div> -->
                         <div class="flex items-center gap-4 mb-8 pb-8 border-b border-white/5">
                             <img :src="selectedBarber.avatar_url" class="w-16 h-16 rounded-full object-cover border border-gold/50">
                             <div>
