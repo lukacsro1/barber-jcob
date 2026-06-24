@@ -94,10 +94,11 @@ Route::get('/book', function () {
         });
     $services = \App\Models\Service::all(['id', 'name', 'category', 'price', 'duration_minutes']);
     $appointments = \App\Models\Appointment::where('start_at', '>=', now()->startOfDay())
-        ->get(['user_id', 'start_at'])
+        ->get(['user_id', 'start_at', 'service'])
         ->map(function ($app) {
             return [
-                'user_id' => $app->user_id,
+                'user_id' => (int) $app->user_id,
+                'service' => $app->service,
                 'date' => \Carbon\Carbon::parse($app->start_at)->format('Y-m-d'),
                 'time' => \Carbon\Carbon::parse($app->start_at)->format('H:i'),
             ];

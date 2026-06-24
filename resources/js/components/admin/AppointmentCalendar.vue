@@ -34,29 +34,39 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             <!-- Time Slots -->
             <div class="lg:col-span-8 space-y-4">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <h2 class="text-xl font-serif text-white">Daily Schedule</h2>
-                    <div v-if="userRole === 'admin'" class="flex bg-zinc-900 border border-white/5 rounded-lg p-1">
-                        <button 
-                            @click="selectedBarberId = null"
-                            class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md"
-                            :class="!selectedBarberId ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'"
-                        >
-                            All
-                        </button>
-                        <button 
-                            v-for="barber in barbers" 
-                            :key="barber.id"
-                            @click="selectedBarberId = barber.id"
-                            class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md"
-                            :class="selectedBarberId === barber.id ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'"
-                        >
-                            {{ barber.name.split(' ')[0] }}
-                        </button>
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                    <h2 class="text-xl font-serif text-white">{{ viewMode === 'calendar' ? 'Daily Schedule' : 'All Upcoming Appointments' }}</h2>
+                    <div class="flex gap-4 items-center flex-wrap">
+                        <!-- View Mode Toggle -->
+                        <div class="flex bg-zinc-900 border border-white/5 rounded-lg p-1">
+                            <button @click="viewMode = 'calendar'" class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md" :class="viewMode === 'calendar' ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'">Calendar</button>
+                            <button @click="viewMode = 'list'" class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md" :class="viewMode === 'list' ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'">List All</button>
+                        </div>
+
+                        <!-- Barber Filter (Admin only) -->
+                        <div v-if="userRole === 'admin'" class="flex bg-zinc-900 border border-white/5 rounded-lg p-1">
+                            <button 
+                                @click="selectedBarberId = null"
+                                class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md"
+                                :class="!selectedBarberId ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'"
+                            >
+                                All
+                            </button>
+                            <button 
+                                v-for="barber in barbers" 
+                                :key="barber.id"
+                                @click="selectedBarberId = barber.id"
+                                class="px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold transition-all rounded-md"
+                                :class="selectedBarberId === barber.id ? 'bg-gold text-dark' : 'text-gray-500 hover:text-gray-300'"
+                            >
+                                {{ barber.name.split(' ')[0] }}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="space-y-3">
+                <!-- Calendar View (Time Slots) -->
+                <div v-if="viewMode === 'calendar'" class="space-y-3">
                     <div 
                         v-for="slot in timeSlots" 
                         :key="slot.time"
@@ -101,6 +111,57 @@
                                 'bg-gold': slot.appointment.status === 'scheduled',
                                 'bg-green-500': slot.appointment.status === 'completed',
                                 'bg-red-500': slot.appointment.status === 'cancelled',
+                            }"
+                        ></div>
+                    </div>
+                </div>
+                </div>
+
+                <!-- List View (All Appointments) -->
+                <div v-else class="space-y-3">
+                    <div v-if="allUpcomingAppointments.length === 0" class="text-gray-500 text-sm italic py-8 text-center border border-white/5 bg-[#111] rounded-xl">No upcoming appointments found.</div>
+                    
+                    <div 
+                        v-for="app in allUpcomingAppointments" 
+                        :key="app.id"
+                        @click="openEditModal(app)"
+                        class="group bg-[#111] border border-white/5 rounded-xl p-4 flex items-center gap-6 hover:border-gold/30 transition-all relative overflow-hidden cursor-pointer"
+                    >
+                        <div class="w-24 text-center border-r border-white/5 pr-4">
+                            <div class="text-[10px] uppercase font-bold text-gray-500 tracking-widest mb-1">{{ new Date(app.start_at).toLocaleDateString('ro-RO', {month: 'short', day: 'numeric'}) }}</div>
+                            <div class="text-lg font-serif text-gold">{{ new Date(app.start_at).toLocaleTimeString('ro-RO', {hour: '2-digit', minute: '2-digit'}) }}</div>
+                        </div>
+                        
+                        <div class="flex-1 flex items-center justify-between">
+                            <div>
+                                <div class="text-sm font-medium text-white group-hover:text-gold transition-colors">{{ app.customer_name }}</div>
+                                <div class="text-[10px] uppercase tracking-widest text-gray-500 font-bold">
+                                    {{ app.customer_phone }} 
+                                </div>
+                                <div class="text-[10px] uppercase tracking-widest text-gold/60 font-bold">{{ app.service }}</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-[10px] text-gray-500 uppercase font-bold">{{ app.barber ? app.barber.name : 'Unknown' }}</div>
+                                <div class="flex gap-1 mt-1 justify-end">
+                                    <span class="px-2 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" 
+                                        :class="{
+                                            'bg-gold/10 text-gold border border-gold/20': app.status === 'scheduled',
+                                            'bg-green-500/10 text-green-400 border border-green-500/20': app.status === 'completed',
+                                            'bg-red-500/10 text-red-400 border border-red-500/20': app.status === 'cancelled',
+                                        }"
+                                    >
+                                        {{ app.status || 'scheduled' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Status Indicator line -->
+                        <div class="absolute left-0 top-0 h-full w-[2px]"
+                            :class="{
+                                'bg-gold': app.status === 'scheduled',
+                                'bg-green-500': app.status === 'completed',
+                                'bg-red-500': app.status === 'cancelled',
                             }"
                         ></div>
                     </div>
@@ -243,6 +304,7 @@ const isEditMode = ref(false)
 const editingAppointmentId = ref(null)
 const loading = ref(false)
 const errorMsg = ref('')
+const viewMode = ref('calendar')
 
 const form = reactive({
     user_id: '',
@@ -375,6 +437,18 @@ const estimatedRevenue = computed(() => {
         const price = serviceObj ? parseFloat(serviceObj.price) : 150
         return total + price
     }, 0)
+})
+
+const allUpcomingAppointments = computed(() => {
+    const todayStr = new Date().toISOString().split('T')[0]
+    return appointments.value
+        .filter(app => {
+            const matchesBarber = !selectedBarberId.value || app.user_id === selectedBarberId.value
+            const appDateStr = app.start_at.split(' ')[0]
+            const isFuture = appDateStr >= todayStr
+            return matchesBarber && isFuture
+        })
+        .sort((a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime())
 })
 
 // Actions
